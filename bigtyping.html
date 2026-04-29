@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>GPタイピングゲーム</title>
+
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:linear-gradient(135deg,#0a0a0a,#1c1c1c);
+  color:white;
+  text-align:center;
+}
+
+h1{color:#00ffcc;}
+
+.card{
+  max-width:750px;
+  margin:20px auto;
+  background:rgba(255,255,255,0.05);
+  padding:20px;
+  border-radius:12px;
+}
+
+#jp{font-size:30px;}
+
+#word{
+  font-size:52px;
+  color:#00ffcc;
+  letter-spacing:2px;
+}
+
+#ghost{
+  font-size:22px;
+  color:rgba(255,255,255,0.35);
+  min-height:30px;
+  margin-top:5px;
+}
+
+#typed{
+  font-size:22px;
+  color:#888;
+  min-height:30px;
+}
+
+select,button{
+  margin:5px;
+  padding:8px 12px;
+  border:none;
+  border-radius:8px;
+}
+
+button{background:#00ffcc;cursor:pointer;}
+
+#hs{color:#ffcc00;margin-top:10px;}
+#title{color:#ff66ff;margin-top:5px;}
+#help{display:none;text-align:left;color:#aaa;margin-top:10px;}
+#history{color:#aaa;font-size:14px;margin-top:10px;}
+</style>
+</head>
+
+<body>
+
+<h1>🔥 GP タイピングゲーム</h1>
+
+<div class="card">
+
+<select id="mode">
+<option value="practice">練習</option>
+<option value="normal">普通</option>
+<option value="one">一発勝負</option>
+<option value="hard">めっちゃムズイ</option>
+</select>
+
+<select id="level">
+<option value="low">低</option>
+<option value="mid">中</option>
+<option value="high">高</option>
+</select>
+
+<button onclick="start()">スタート</button>
+<button onclick="toggleHelp()">解説</button>
+
+<div id="hs">ハイスコア: 0</div>
+<div id="title">称号: -</div>
+
+<div id="help">
+📘 日本語→ローマ字タイピングゲーム<br>
+・ゴースト入力表示あり<br>
+・デッキ方式で重複防止<br>
+・モード＆難易度あり
+</div>
+
+<div id="jp">---</div>
+<div id="word">---</div>
+
+<!-- ⭐ ここが今回の追加 -->
+<div id="ghost"></div>
+
+<div id="typed"></div>
+
+<div>
+⭐<span id="score">0</span>　
+❌<span id="miss">0</span>　
+⏱<span id="time">0</span>
+</div>
+
+<div id="history">入力履歴: -</div>
+
+</div>
+
+<script>
+
+// 🏆 ハイスコア
+let hs=localStorage.getItem("gp_hs")||0;
+document.getElementById("hs").textContent="ハイスコア:"+hs;
+
+// 🔊 音
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+function beep(f){
+  const o=ctx.createOscillator();
+  const g=ctx.createGain();
+  o.frequency.value=f;
+  o.type="square";
+  g.gain.value=0.06;
+  o.connect(g);g.connect(ctx.destination);
+  o.start();o.stop(ctx.currentTime+0.06);
+}
+const ok=()=>beep(800);
+const ng=()=>beep(200);
+
+// 🟢低（簡略）
+const low=[
+{jp:"猫",rom:"neko"},{jp:"犬",rom:"inu"},{jp:"水",rom:"mizu"},{jp:"山",rom:"yama"},{jp:"花",rom:"hana"},
+{jp:"空",rom:"sora"},{jp:"海",rom:"umi"},{jp:"川",rom:"kawa"},{jp:"火",rom:"hi"},{jp:"風",rom:"kaze"},
+{jp:"雨",rom:"ame"},{jp:"月",rom:"tsuki"},{jp:"星",rom:"hoshi"},{jp:"森",rom:"mori"},{jp:"草",rom:"kusa"},
+{jp:"石",rom:"ishi"},{jp:"鳥",rom:"tori"},{jp:"魚",rom:"sakana"},{jp:"手",rom:"te"},{jp:"足",rom:"ashi"},
+{jp:"目",rom:"me"},{jp:"耳",rom:"mimi"},{jp:"口",rom:"kuchi"},{jp:"家",rom:"ie"},{jp:"道",rom:"michi"},
+{jp:"車",rom:"kuruma"},{jp:"駅",rom:"eki"},{jp:"店",rom:"mise"},{jp:"本",rom:"hon"},{jp:"紙",rom:"kami"},
+{jp:"机",rom:"tsukue"},{jp:"椅子",rom:"isu"},{jp:"鉛筆",rom:"enpitsu"},{jp:"学校",rom:"gakkou"},{jp:"友達",rom:"tomodachi"},
+{jp:"朝",rom:"asa"},{jp:"昼",rom:"hiru"},{jp:"夜",rom:"yoru"},{jp:"電気",rom:"denki"},{jp:"窓",rom:"mado"},
+{jp:"ドア",rom:"doa"},{jp:"布団",rom:"futon"},{jp:"時計",rom:"tokei"},{jp:"公園",rom:"kouen"},{jp:"橋",rom:"hashi"},
+{jp:"電車",rom:"densha"},{jp:"バス",rom:"basu"},{jp:"地図",rom:"chizu"},{jp:"鍵",rom:"kagi"},{jp:"パン",rom:"pan"}
+];
+
+// 🟡中
+const mid=[
+{jp:"ありがとう",rom:"arigatou"},{jp:"こんにちは",rom:"konnichiwa"},{jp:"さくら",rom:"sakura"},{jp:"でんわ",rom:"denwa"},
+{jp:"学校",rom:"gakkou"},{jp:"電車",rom:"densha"},{jp:"友達",rom:"tomodachi"},{jp:"先生",rom:"sensei"},
+{jp:"勉強",rom:"benkyou"},{jp:"時間",rom:"jikan"},{jp:"旅行",rom:"ryokou"},{jp:"仕事",rom:"shigoto"},
+{jp:"音楽",rom:"ongaku"},{jp:"映画",rom:"eiga"},{jp:"写真",rom:"shashin"},{jp:"家族",rom:"kazoku"},
+{jp:"食べ物",rom:"tabemono"},{jp:"野菜",rom:"yasai"},{jp:"果物",rom:"kudamono"},{jp:"ニュース",rom:"nyuusu"},
+{jp:"テレビ",rom:"terebi"},{jp:"スマホ",rom:"sumaho"},{jp:"パソコン",rom:"pasokon"},{jp:"ゲーム",rom:"geemu"},
+{jp:"ロボット",rom:"robotto"},{jp:"科学",rom:"kagaku"},{jp:"社会",rom:"shakai"},{jp:"世界",rom:"sekai"},
+{jp:"未来",rom:"mirai"},{jp:"過去",rom:"kako"},{jp:"自然",rom:"shizen"},{jp:"動物",rom:"doubutsu"},
+{jp:"植物",rom:"shokubutsu"},{jp:"地球",rom:"chikyuu"},{jp:"宇宙",rom:"uchu"},{jp:"学校生活",rom:"gakkouseikatsu"},
+{jp:"宿題",rom:"shukudai"},{jp:"給食",rom:"kyuushoku"},{jp:"運動",rom:"undou"},{jp:"試験",rom:"shiken"},
+{jp:"交通",rom:"koutsuu"},{jp:"都市",rom:"toshi"},{jp:"村",rom:"mura"},{jp:"建物",rom:"tatemono"},
+{jp:"会社",rom:"kaisha"},{jp:"銀行",rom:"ginkou"},{jp:"病院",rom:"byouin"},{jp:"郵便",rom:"yuubin"},
+{jp:"手紙",rom:"tegami"},{jp:"天気",rom:"tenki"}
+];
+
+// 🔴高
+const high=[
+{jp:"新幹線",rom:"shinkansen"},{jp:"宇宙",rom:"uchu"},{jp:"科学",rom:"kagaku"},{jp:"時間",rom:"jikan"},
+{jp:"未来",rom:"mirai"},{jp:"過去",rom:"kako"},{jp:"進化",rom:"shinka"},{jp:"情報",rom:"jouhou"},
+{jp:"技術",rom:"gijutsu"},{jp:"理論",rom:"riron"},{jp:"構造",rom:"kouzou"},{jp:"分析",rom:"bunseki"},
+{jp:"法則",rom:"housoku"},{jp:"変化",rom:"henka"},{jp:"制御",rom:"seigyo"},{jp:"反応",rom:"hannou"},
+{jp:"意識",rom:"ishiki"},{jp:"無限",rom:"mugen"},{jp:"空間",rom:"kuukan"},{jp:"次元",rom:"jigen"},
+{jp:"観測",rom:"kansoku"},{jp:"文明",rom:"bunmei"},{jp:"進歩",rom:"shinpo"},{jp:"統計",rom:"toukei"},
+{jp:"確率",rom:"kakuritsu"},{jp:"構築",rom:"kouchiku"},{jp:"設計",rom:"sekkei"},{jp:"演算",rom:"enzan"},
+{jp:"最適",rom:"saiteki"},{jp:"高速",rom:"kousoku"},{jp:"限界",rom:"genkai"},{jp:"突破",rom:"toppa"},
+{jp:"解析",rom:"kaiseki"},{jp:"予測",rom:"yosoku"},{jp:"理想",rom:"risou"},{jp:"現実",rom:"genjitsu"},
+{jp:"存在",rom:"sonzai"},{jp:"拡張",rom:"kakuchou"},{jp:"構成",rom:"kousei"},{jp:"進行",rom:"shinkou"},
+{jp:"計算機",rom:"keisanki"},{jp:"アルゴリズム",rom:"arugorizumu"},{jp:"データ",rom:"deeta"},{jp:"ネットワーク",rom:"nettowaaku"},
+{jp:"人工知能",rom:"jinkouchino"},{jp:"シミュレーション",rom:"shimyureeshon"},{jp:"エネルギー",rom:"enerugii"},
+{jp:"加速度",rom:"kasokudo"},{jp:"重力",rom:"juuryoku"},{jp:"光速",rom:"kousoku"}
+];
+
+let jp="",rom="",i=0;
+let score=0,miss=0,time=0,timer,running=false;
+let deck=[],history=[];
+
+// シャッフル
+function shuffle(a){return a.sort(()=>Math.random()-0.5)}
+
+// モード
+function mode(){
+  const m=document.getElementById("mode").value;
+  if(m==="practice") return {time:0,missLimit:999};
+  if(m==="normal") return {time:30,missLimit:999};
+  if(m==="one") return {time:30,missLimit:3};
+  if(m==="hard") return {time:20,missLimit:2};
+}
+
+// 単語生成
+function next(){
+  const lv=document.getElementById("level").value;
+  const list=lv==="low"?low:lv==="mid"?mid:high;
+
+  if(deck.length===0) deck=shuffle([...list]);
+
+  const w=deck.pop();
+
+  jp=w.jp;
+  rom=w.rom;
+
+  document.getElementById("jp").textContent=jp;
+  document.getElementById("word").textContent=rom;
+
+  i=0;
+  document.getElementById("ghost").textContent="";
+}
+
+// スタート
+function start(){
+  const s=mode();
+
+  score=0;miss=0;history=[];
+  time=s.time;
+  running=true;
+
+  deck=[];
+
+  document.getElementById("score").textContent=0;
+  document.getElementById("miss").textContent=0;
+  document.getElementById("time").textContent=time;
+
+  next();
+
+  clearInterval(timer);
+
+  if(time>0){
+    timer=setInterval(()=>{
+      time--;
+      document.getElementById("time").textContent=time;
+      if(time<=0) end();
+    },1000);
+  }
+}
+
+// 称号
+function title(s){
+  if(s<1000) return "初心者";
+  if(s<3000) return "中級者";
+  if(s<5000) return "上級者";
+  if(s<7000) return "神速";
+  return "人外";
+}
+
+// 終了
+function end(){
+  running=false;
+  clearInterval(timer);
+
+  document.getElementById("jp").textContent="GAME OVER";
+  document.getElementById("word").textContent="";
+  document.getElementById("ghost").textContent="";
+  document.getElementById("typed").textContent="";
+
+  if(score>hs){
+    hs=score;
+    localStorage.setItem("gp_hs",hs);
+  }
+
+  document.getElementById("hs").textContent="ハイスコア:"+hs;
+  document.getElementById("title").textContent="称号: "+title(score);
+  document.getElementById("history").textContent="入力履歴: "+history.join(", ");
+}
+
+// 入力
+document.addEventListener("keydown",(e)=>{
+  if(!running) return;
+
+  const k=e.key.toLowerCase();
+  if(!/^[a-z]$/.test(k)) return;
+
+  if(k===rom[i]){
+    i++;
+    ok();
+    document.getElementById("ghost").textContent = rom.slice(0,i);
+  }else{
+    miss++;
+    ng();
+    document.getElementById("miss").textContent=miss;
+    if(miss>=mode().missLimit) end();
+  }
+
+  if(i===rom.length){
+    score+=100;
+    document.getElementById("score").textContent=score;
+    history.push(rom);
+    next();
+  }
+});
+
+// 解説
+function toggleHelp(){
+  const h=document.getElementById("help");
+  h.style.display=h.style.display==="none"?"block":"none";
+}
+
+</script>
+
+</body>
+</html>
